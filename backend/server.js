@@ -1,0 +1,177 @@
+require('dotenv').config({ path: '../.env' });
+const express = require('express');
+const cors = require('cors');
+const fetch = require('node-fetch');
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+// Your Agora credentials
+const appId = process.env.AGORA_APP_ID;
+const customerId = process.env.AGORA_CUSTOMER_ID;
+const customerSecret = process.env.AGORA_CUSTOMER_SECRET;
+
+// Start AI Agent
+app.post('/api/start-ai-agent', async (req, res) => {
+  try {
+    const { channel, token, uid } = req.body;
+    
+    console.log('\n🚀 === STARTING AI AGENT ===');
+    console.log('📍 Channel:', channel);
+    console.log('🆔 UID:', uid);
+    console.log('🔑 App ID:', appId);
+    console.log('👤 Customer ID:', customerId);
+    console.log('🔐 Customer Secret:', customerSecret ? 'SET' : 'MISSING');
+    console.log('🤖 Gemini API Key:', process.env.GEMINI_API_KEY ? 'SET' : 'MISSING');
+    console.log('🎤 Cartesia API Key:', process.env.CARTESIA_API_KEY ? 'SET' : 'MISSING');
+    
+    // Create base64 credentials using customer ID and secret
+    const credentials = Buffer.from(`${customerId}:${customerSecret}`).toString('base64');
+    console.log('🔒 Credentials created:', credentials.substring(0, 20) + '...');
+    
+    const data = {
+      name: `ai-agent-${Date.now()}`,
+      properties: {
+        channel: channel,
+        token: token,
+        agent_rtc_uid: Math.floor(Math.random() * 1000000).toString(),
+        remote_rtc_uids: ["*"],
+        enable_string_uid: false,
+        idle_timeout: 300,
+        llm: {
+          url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse&key=${process.env.GEMINI_API_KEY}`,
+          system_messages: [
+            {
+              parts: [
+                {
+                  text: "You are DoseMate, a helpful medication assistant. Keep responses very short and conversational."
+                }
+              ],
+              role: "user"
+            }
+          ],
+          greeting_message: "Hi! I'm DoseMate. How can I help you with your medications today?",
+          failure_message: "Sorry, could you repeat that?",
+          max_history: 10,
+          params: {
+            model: "gemini-2.0-flash"
+          },
+          style: "gemini"
+        },
+        asr: {
+          language: "en-US",
+          vendor: "ares"
+        },
+        tts: {
+          vendor: "cartesia",
+          params: {
+            api_key: process.env.CARTESIA_API_KEY,
+            model_id: "sonic-2",
+            voice: {
+              mode: "id",
+              id: "6ccbfb76-1fc6-48f7-b71d-91ac6298247b"
+            },
+            output_format: {
+              container: "raw",
+              sample_rate: 16000
+            },
+            language: "en"
+          }
+        }
+      }
+    };
+
+    console.log('Making API call to Agora...');
+    console.log('Request body:', JSON.stringify(data, null, 2));
+    
+    const response = await fetch(`https://api.agora.io/api/conversational-ai-agent/v2/projects/${appId}/join`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${credentials}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(data)
+    });
+
+    console.log('Response status:', response.status);
+    console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+    
+    const result = await response.json();
+    console.log('Response body:', JSON.stringify(result, null, 2));
+    
+    // Log everything for debugging
+    if (!response.ok) {
+      console.error('❌ API FAILED:');
+      console.error('Status:', response.status);
+      console.error('Status Text:', response.statusText);
+      console.error('Headers:', Object.fromEntries(response.headers.entries()));
+      console.error('Error Response:', result);
+    } else {
+      console.log('✅ API SUCCESS - Agent should be working');
+    }
+    
+    res.json({
+      success: response.status === 200,
+      status: response.status,
+      ...result
+    });
+
+  } catch (error) {
+    console.error('AI Agent Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Stop AI Agent
+app.post('/api/stop-ai-agent', async (req, res) => {
+  try {
+    const { agentId } = req.body;
+    
+    console.log('\n=== Stopping AI Agent ===');
+    console.log('Agent ID:', agentId);
+    
+    const credentials = Buffer.from(`${customerId}:${customerSecret}`).toString('base64');
+
+    const response = await fetch(`https://api.agora.io/api/conversational-ai-agent/v2/projects/${appId}/agents/${agentId}/leave`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${credentials}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    console.log('Stop response status:', response.status);
+    const result = await response.text();
+    console.log('Stop response body:', result);
+
+    res.json({
+      success: response.status === 200,
+      status: response.status,
+      message: result || 'Agent stopped'
+    });
+
+  } catch (error) {
+    console.error('Stop AI Agent Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Test endpoint to check if server is working
+app.get('/api/test', (req, res) => {
+  res.json({ 
+    message: 'Server is working!',
+    appId: appId,
+    customerId: customerId,
+    timestamp: new Date().toISOString()
+  });
+});
+
+const PORT = 3000;
+app.listen(PORT, () => {
+  console.log(`\n🚀 Server running on port ${PORT}`);
+  console.log(`📱 App ID: ${appId}`);
+  console.log(`👤 Customer ID: ${customerId}`);
+  console.log(`🧪 Test: http://localhost:${PORT}/api/test`);
+  console.log(`\nReady to debug AI agent!\n`);
+});
