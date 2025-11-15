@@ -2,10 +2,51 @@ require('dotenv').config({ path: '../.env' });
 const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
+const mongoose = require('mongoose');
+const User = require('./models/User');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// MongoDB connection
+mongoose.connect(process.env.MONGODB_URI)
+  .then(() => console.log('✅ Connected to MongoDB'))
+  .catch(err => console.error('❌ MongoDB connection error:', err));
+
+// User endpoints with MongoDB
+app.post('/api/users', async (req, res) => {
+  try {
+    const user = new User(req.body);
+    await user.save();
+    console.log('✅ User saved to MongoDB:', user.name);
+    res.status(201).json(user);
+  } catch (error) {
+    console.error('❌ Error saving user:', error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.get('/api/users/:id', async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json(user);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.put('/api/users/:id', async (req, res) => {
+  try {
+    const user = await User.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    console.log('✅ User updated in MongoDB:', user.name);
+    res.json(user);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
 
 // Your Agora credentials
 const appId = process.env.AGORA_APP_ID;

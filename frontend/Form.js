@@ -25,27 +25,36 @@ export default function Form({ onUserCreated }) {
           aiPersonality: 'friendly',
           reminderFrequency: 'daily',
           voicePreference: language
-        }
+        },
+        emergencyContact
       };
 
-      console.log('Form: Sending user data:', userData);
+      console.log('Form: Sending user data to MongoDB:', userData);
 
-      // For now, just simulate success and call callback
-      // TODO: Add actual API call later
-      const mockUser = { _id: Date.now(), ...userData };
-      
-      setTimeout(() => {
+      const response = await fetch('http://192.168.1.8:3000/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(userData)
+      });
+
+      if (response.ok) {
+        const user = await response.json();
+        console.log('✅ User saved to MongoDB:', user);
         setLoading(false);
-        console.log('Form: User created:', mockUser);
         if (onUserCreated) {
-          onUserCreated(mockUser);
+          onUserCreated(user);
         }
-      }, 500);
+      } else {
+        const error = await response.text();
+        console.error('❌ Failed to save user:', error);
+        setLoading(false);
+        alert('Failed to save user data');
+      }
 
     } catch (error) {
-      console.error('Form: Error saving user:', error);
+      console.error('❌ Form: Error saving user:', error);
       setLoading(false);
-      alert('Error saving user data');
+      alert('Network error. Make sure backend is running.');
     }
   };
 
