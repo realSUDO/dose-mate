@@ -16,6 +16,10 @@ yarn-error.log*
 *.pem
 config/keys.js
 
+# Documentation (except README.md)
+*.md
+!README.md
+
 # Logs
 logs
 *.log
