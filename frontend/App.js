@@ -3,13 +3,15 @@ import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Alert } from 'r
 import AgoraRTC from 'agora-rtc-sdk-ng';
 import Form from './Form';
 import Prescription from './Prescription';
-import PDFUpload from './PDFUpload';
 
 export default function App() {
   // User management state
   const [user, setUser] = useState(null);
   const [showForm, setShowForm] = useState(true); // Show form initially
   const [showPrescription, setShowPrescription] = useState(false);
+  
+  // Generate simple user ID for PDF storage
+  const [userId] = useState(() => 'user_' + Date.now());
   
   // Original working voice states
   const [isInCall, setIsInCall] = useState(false);
@@ -135,13 +137,13 @@ export default function App() {
       
       // Create personalized context based on user data
       const userContext = user ? {
-        _id: user._id, // Add user ID for RAG context
+        _id: userId, // Use generated userId for RAG context
         name: user.name,
         age: user.age,
         language: user.preferences?.voicePreference || 'English',
         medications: user.currentMedications || [],
         conditions: user.medicalConditions || []
-      } : null;
+      } : { _id: userId }; // Always include userId even without user data
       
       const response = await fetch('http://192.168.1.8:3000/api/start-ai-agent', {
         method: 'POST',
@@ -246,7 +248,7 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Form (hidden initially since showForm=false) */}
+      {/* Form (for new users) */}
       {showForm && (
         <View style={styles.formOverlay}>
           <Form onNext={handleFormNext} />
@@ -256,36 +258,39 @@ export default function App() {
       {/* Prescription Screen */}
       {showPrescription && (
         <View style={styles.formOverlay}>
-          <Prescription user={user} onComplete={handlePrescriptionComplete} />
+          <Prescription user={{...user, _id: userId}} onComplete={handlePrescriptionComplete} />
         </View>
       )}
       
-      {/* User header with profile button */}
-      {user && !showForm && !showPrescription && (
-        <View style={styles.header}>
-          <Text style={styles.welcome}>Welcome, {user.name}! 💊</Text>
-          <TouchableOpacity style={styles.profileButton} onPress={() => setShowForm(true)}>
-            <Text style={styles.profileText}>Profile</Text>
+      {/* Main Dashboard */}
+      {!showForm && !showPrescription && (
+        <>
+          {/* User header with profile button */}
+          <View style={styles.header}>
+            <Text style={styles.welcome}>Welcome, {user?.name || 'User'}! 💊</Text>
+            <TouchableOpacity style={styles.profileButton} onPress={() => setShowForm(true)}>
+              <Text style={styles.profileText}>Profile</Text>
+            </TouchableOpacity>
+          </View>
+          
+          {/* Original working interface */}
+          <TouchableOpacity 
+            style={[styles.circle, isInCall && styles.activeCircle]} 
+            onPress={handleTalkToMe}
+          >
+            <Text style={styles.text}>
+              {isInCall ? 'End Call' : 'Talk to Me'}
+            </Text>
           </TouchableOpacity>
-        </View>
-      )}
-      
-      {/* Original working interface */}
-      <TouchableOpacity 
-        style={[styles.circle, isInCall && styles.activeCircle]} 
-        onPress={handleTalkToMe}
-      >
-        <Text style={styles.text}>
-          {isInCall ? 'End Call' : 'Talk to Me'}
-        </Text>
-      </TouchableOpacity>
-      
-      {isInCall && (
-        <View style={styles.statusContainer}>
-          <Text style={styles.status}>🔗 Connection: {connectionStatus}</Text>
-          <Text style={styles.status}>🎤 Microphone: {micStatus}</Text>
-          <Text style={styles.status}>🤖 AI Agent: {agentStatus}</Text>
-        </View>
+          
+          {isInCall && (
+            <View style={styles.statusContainer}>
+              <Text style={styles.status}>🔗 Connection: {connectionStatus}</Text>
+              <Text style={styles.status}>🎤 Microphone: {micStatus}</Text>
+              <Text style={styles.status}>🤖 AI Agent: {agentStatus}</Text>
+            </View>
+          )}
+        </>
       )}
     </SafeAreaView>
   );

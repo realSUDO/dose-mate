@@ -1,8 +1,13 @@
 const mongoose = require('mongoose');
 
 const userSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  age: { type: Number, required: true },
+  // Authentication fields
+  username: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+  
+  // Profile fields (optional for new users)
+  name: { type: String },
+  age: { type: Number },
   medicalConditions: [String],
   currentMedications: [{
     name: String,

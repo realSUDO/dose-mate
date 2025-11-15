@@ -4,8 +4,11 @@ const cors = require('cors');
 const fetch = require('node-fetch');
 const mongoose = require('mongoose');
 const multer = require('multer');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 const User = require('./models/User');
 const ragService = require('./services/ragService');
+const contentSafety = require('./services/contentSafety');
 
 const app = express();
 app.use(cors());
@@ -28,6 +31,80 @@ const upload = multer({
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('✅ Connected to MongoDB'))
   .catch(err => console.error('❌ MongoDB connection error:', err));
+
+// Authentication endpoints
+app.post('/api/auth/signup', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    
+    // Check if user exists
+    const existingUser = await User.findOne({ username });
+    if (existingUser) {
+      return res.status(400).json({ success: false, error: 'Username already exists' });
+    }
+    
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
+    // Create user with only username and password
+    const user = new User({ username, password: hashedPassword });
+    await user.save();
+    
+    // Generate JWT
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET || 'fallback-secret', { expiresIn: '7d' });
+    
+    res.json({
+      success: true,
+      token,
+      user: { _id: user._id, username: user.username },
+      isNewUser: true // Always true for signup
+    });
+  } catch (error) {
+    console.error('Signup error:', error);
+    res.status(500).json({ success: false, error: 'Signup failed' });
+  }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    
+    // Find user with all data
+    const user = await User.findOne({ username });
+    if (!user) {
+      return res.status(400).json({ success: false, error: 'Invalid credentials' });
+    }
+    
+    // Check password
+    const validPassword = await bcrypt.compare(password, user.password);
+    if (!validPassword) {
+      return res.status(400).json({ success: false, error: 'Invalid credentials' });
+    }
+    
+    // Generate JWT
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET || 'fallback-secret', { expiresIn: '7d' });
+    
+    // Return complete user data
+    res.json({
+      success: true,
+      token,
+      user: {
+        _id: user._id,
+        username: user.username,
+        name: user.name,
+        age: user.age,
+        medicalConditions: user.medicalConditions,
+        currentMedications: user.currentMedications,
+        preferences: user.preferences,
+        emergencyContact: user.emergencyContact
+      },
+      isNewUser: false // Always false for login - existing user
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ success: false, error: 'Login failed' });
+  }
+});
 
 // User endpoints with MongoDB
 app.post('/api/users', async (req, res) => {
@@ -109,35 +186,106 @@ app.post('/api/start-ai-agent', async (req, res) => {
     
     // Get RAG context if user has uploaded PDFs
     let ragContext = '';
-    if (userContext && userContext._id && query) {
+    if (userContext && userContext._id) {
       try {
-        const contextResults = await ragService.retrieveContext(userContext._id, query);
+        console.log('🔍 Attempting RAG context retrieval for user:', userContext._id);
+        const contextResults = await ragService.retrieveContext(userContext._id, query || 'prescription medication');
+        console.log('📊 RAG results count:', contextResults.length);
+        console.log('📊 RAG results:', contextResults);
+        
         if (contextResults.length > 0) {
-          ragContext = '\n\nRelevant prescription information:\n' + 
-            contextResults.map(ctx => `- ${ctx.text}`).join('\n');
-          console.log('📚 RAG Context retrieved:', ragContext.substring(0, 200) + '...');
+          // Clean up the prescription text
+          const cleanedContext = contextResults.map(ctx => {
+            // Remove null characters and clean up formatting
+            return ctx.text
+              .replace(/\u0000/g, '') // Remove null characters
+              .replace(/\n\s*\n/g, '\n') // Remove extra blank lines
+              .replace(/\[FILTERED\]/g, '[REDACTED]') // Clean up filtered content
+              .trim();
+          }).join('\n\n');
+          
+          ragContext = `\n\nYour Current Prescription Details:\n${cleanedContext}\n\nUse this information to answer questions about medications, dosages, and timing.`;
+          
+          console.log('📚 RAG Context length:', ragContext.length);
+          console.log('📚 Cleaned RAG Context preview:', ragContext.substring(0, 500) + '...');
+        } else {
+          console.log('📭 No RAG context found for user - no PDFs uploaded yet');
         }
       } catch (error) {
         console.log('⚠️ RAG context retrieval failed:', error.message);
       }
+    } else {
+      console.log('⚠️ RAG context skipped - missing userContext._id');
+      console.log('UserContext:', userContext);
     }
+    
+    console.log('🔍 Final ragContext length:', ragContext.length);
     
     // Create personalized system message based on user context
-    let systemMessage = "You are DoseMate, a helpful medication assistant. Keep responses very short and conversational.";
-    let greetingMessage = "Hi! I'm DoseMate. How can I help you with your medications today?";
+    let systemMessage = `You are DoseMate, a helpful medication assistant. 
+
+RESPONSE STYLE:
+- Give SHORT, DIRECT answers (1-2 sentences max)
+- Answer the exact question asked
+- No unnecessary explanations or context
+- Be conversational but concise
+
+STRICT GUIDELINES:
+- ONLY discuss medications, prescriptions, and general health information
+- NEVER provide specific medical diagnoses or treatment recommendations
+- ALWAYS recommend consulting healthcare professionals for medical decisions
+- If asked about non-medical topics, politely redirect to medication questions
+
+Examples:
+User: "How many times do I take my medication?"
+You: "Take it 3 times daily with meals."
+
+User: "What are the side effects?"
+You: "Common side effects include nausea and dizziness."`;
+
+    let greetingMessage = "Hi! I'm DoseMate. What can I help you with?";
     
     if (userContext) {
-      systemMessage = `You are DoseMate, a helpful medication assistant for ${userContext.name}, who is ${userContext.age} years old. ` +
-        `They prefer ${userContext.language} language. ` +
-        (userContext.medications.length > 0 ? `They are currently taking: ${userContext.medications.map(m => m.name).join(', ')}. ` : '') +
-        (userContext.conditions.length > 0 ? `They have these medical conditions: ${userContext.conditions.join(', ')}. ` : '') +
-        ragContext +
-        `Keep responses very short, conversational, and personalized to ${userContext.name}.`;
+      systemMessage = `You are DoseMate, a helpful medication assistant for ${userContext.name}, who is ${userContext.age} years old. 
+They prefer ${userContext.language} language. 
+${userContext.medications && userContext.medications.length > 0 ? `They are currently taking: ${userContext.medications.map(m => m.name).join(', ')}. ` : ''}
+${userContext.conditions && userContext.conditions.length > 0 ? `They have these medical conditions: ${userContext.conditions.join(', ')}. ` : ''}
+${ragContext}
+
+IMPORTANT: You have access to ${userContext.name}'s complete prescription information above. Use this specific information to answer their questions about medications, dosages, timing, and instructions.
+
+RESPONSE STYLE:
+- Give SHORT, DIRECT answers (1-2 sentences max)
+- Answer the exact question asked using the prescription information provided
+- No unnecessary explanations or context
+- Be conversational but concise
+- Use ${userContext.name}'s name occasionally
+
+STRICT GUIDELINES:
+- ONLY discuss medications, prescriptions, and general health information related to ${userContext.name}
+- Use the prescription details provided above to answer questions
+- NEVER provide specific medical diagnoses or treatment recommendations
+- ALWAYS recommend consulting healthcare professionals for medical decisions
+- If asked about non-medical topics, IMMEDIATELY redirect: "I'm DoseMate, I only help with medications and prescriptions. What can I help you with regarding your medications?"
+- DO NOT engage with non-medical questions, politics, general knowledge, or personal advice
+- REFUSE to answer anything outside healthcare domain
+
+Examples:
+User: "How many times do I take my medication?"
+You: "Take Metformin twice daily with breakfast and dinner, ${userContext.name}."
+
+User: "What are the side effects?"
+You: "Common side effects include nausea and dizziness."
+
+User: "What's the weather today?" or "Tell me a joke"
+You: "I'm DoseMate, I only help with medications and prescriptions. What can I help you with regarding your medications?"`;
       
-      greetingMessage = `Hi ${userContext.name}! I'm DoseMate, your personal medication assistant. How can I help you today?`;
+      greetingMessage = `Hi ${userContext.name}! I'm DoseMate, your personal medication assistant. I can help with questions about your prescriptions and medications. How can I help you today?`;
     }
     
-    console.log('🤖 System Message:', systemMessage);
+    console.log('🤖 System Message Length:', systemMessage.length);
+    console.log('🤖 System Message Preview:', systemMessage.substring(0, 500) + '...');
+    console.log('🤖 Full System Message:', systemMessage);
     console.log('👋 Greeting Message:', greetingMessage);
     console.log('🔑 App ID:', appId);
     console.log('👤 Customer ID:', customerId);

@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, TextInput, Scro
 
 export default function Prescription({ user, onComplete }) {
   const [showManualEntry, setShowManualEntry] = useState(false);
+  const [pdfUploaded, setPdfUploaded] = useState(false);
   const [medications, setMedications] = useState([
     { name: '', dosage: '', frequency: '', instructions: '' }
   ]);
@@ -26,26 +27,37 @@ export default function Prescription({ user, onComplete }) {
       const file = e.target.files[0];
       if (!file) return;
 
+      console.log('📄 PDF selected:', file.name);
+
       try {
         const formData = new FormData();
         formData.append('pdf', file);
         formData.append('filename', file.name);
+
+        console.log('📡 Uploading to:', `http://localhost:3000/api/upload-pdf/${user._id || user.id || 'test-user'}`);
 
         const response = await fetch(`http://localhost:3000/api/upload-pdf/${user._id || user.id || 'test-user'}`, {
           method: 'POST',
           body: formData,
         });
 
+        console.log('📥 Upload response status:', response.status);
         const result = await response.json();
+        console.log('📥 Upload result:', result);
         
         if (result.success) {
-          alert(`PDF processed! ${result.vectorCount} chunks stored.`);
+          setPdfUploaded(true);
+          alert(`PDF processed! ${result.vectorCount} chunks stored. You can now proceed.`);
         } else {
-          alert('Upload failed: ' + (result.error || 'Unknown error'));
+          // Still enable Next button even if upload fails
+          setPdfUploaded(true);
+          alert('Upload failed but you can still proceed: ' + (result.error || 'Unknown error'));
         }
       } catch (error) {
         console.error('Upload error:', error);
-        alert('Upload failed');
+        // Still enable Next button even if upload fails
+        setPdfUploaded(true);
+        alert('Upload failed but you can still proceed');
       }
     };
     input.click();
@@ -163,8 +175,8 @@ export default function Prescription({ user, onComplete }) {
             onPress={handlePDFUpload}
           >
             <Text style={styles.iconText}>📄</Text>
-            <Text style={styles.optionText}>Upload PDF</Text>
-            <Text style={styles.optionSubtext}>Upload prescription image or PDF</Text>
+            <Text style={styles.optionText}>Upload Prescription PDF</Text>
+            <Text style={styles.optionSubtext}>Upload your prescription document</Text>
           </TouchableOpacity>
 
           <TouchableOpacity 
@@ -175,14 +187,24 @@ export default function Prescription({ user, onComplete }) {
             <Text style={styles.optionText}>Manual Entry</Text>
             <Text style={styles.optionSubtext}>Type medication details manually</Text>
           </TouchableOpacity>
+        </View>
 
+        <View style={styles.bottomSection}>
           <TouchableOpacity 
-            style={[styles.optionButton, styles.skipButton]}
-            onPress={() => onComplete(user)}
+            style={[
+              styles.nextButtonSmall, 
+              pdfUploaded ? styles.nextButtonEnabled : styles.nextButtonDisabled
+            ]}
+            onPress={() => pdfUploaded && onComplete(user)}
+            disabled={!pdfUploaded}
           >
-            <Text style={styles.iconText}>⏭️</Text>
-            <Text style={styles.optionText}>Skip for Now</Text>
-            <Text style={styles.optionSubtext}>Add medications later</Text>
+            <Text style={[styles.nextButtonText, !pdfUploaded && styles.disabledText]}>
+              {pdfUploaded ? 'Next' : 'Upload PDF to Continue'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={() => onComplete(user)}>
+            <Text style={styles.skipText}>Skip for now</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -248,8 +270,48 @@ const styles = StyleSheet.create({
   uploadButton: {
     backgroundColor: 'rgba(224, 247, 250, 0.9)',
   },
+  bottomSection: {
+    alignItems: 'center',
+    paddingVertical: 30,
+    paddingHorizontal: 20,
+  },
+  nextButtonSmall: {
+    backgroundColor: 'rgba(34, 197, 94, 0.9)',
+    paddingHorizontal: 40,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginBottom: 15,
+    minWidth: 200,
+    alignItems: 'center',
+  },
+  nextButtonEnabled: {
+    backgroundColor: 'rgba(34, 197, 94, 0.9)',
+  },
+  nextButtonDisabled: {
+    backgroundColor: 'rgba(156, 163, 175, 0.6)',
+  },
+  nextButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  skipText: {
+    color: 'rgba(107, 114, 128, 0.8)',
+    fontSize: 14,
+    textDecorationLine: 'underline',
+  },
+  nextButton: {
+    backgroundColor: 'rgba(34, 197, 94, 0.9)',
+  },
   skipButton: {
     backgroundColor: 'rgba(243, 244, 246, 0.8)',
+  },
+  nextButtonDisabled: {
+    backgroundColor: 'rgba(243, 244, 246, 0.8)',
+    opacity: 0.6,
+  },
+  disabledText: {
+    color: 'rgba(107, 114, 128, 0.8)',
   },
   iconText: {
     fontSize: 48,

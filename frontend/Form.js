@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView } from 'react-native';
 
-export default function Form({ onUserCreated, onNext }) {
+export default function Form({ onUserCreated, onNext, user }) {
   const [name, setName] = useState('');
   const [age, setAge] = useState('');
   const [language, setLanguage] = useState('English');
+  const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
   const [emergencyContact, setEmergencyContact] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const languages = ['English', 'Hindi'];
 
   const handleSave = async () => {
     if (!name || !age) {
@@ -29,32 +32,20 @@ export default function Form({ onUserCreated, onNext }) {
         emergencyContact
       };
 
-      console.log('Form: Sending user data to MongoDB:', userData);
+      console.log('Form: User data created:', userData);
 
-      const response = await fetch('http://192.168.1.8:3000/api/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(userData)
-      });
-
-      if (response.ok) {
-        const user = await response.json();
-        console.log('✅ User saved to MongoDB:', user);
-        setLoading(false);
-        if (onNext) {
-          onNext(user); // Go to prescription screen
-        }
-      } else {
-        const error = await response.text();
-        console.error('❌ Failed to save user:', error);
-        setLoading(false);
-        alert('Failed to save user data');
+      // Simulate save delay
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      setLoading(false);
+      if (onNext) {
+        onNext(userData); // Go to prescription screen
       }
 
     } catch (error) {
-      console.error('❌ Form: Error saving user:', error);
+      console.error('❌ Form: Error creating user:', error);
       setLoading(false);
-      alert('Network error. Make sure backend is running.');
+      alert('Error creating user data');
     }
   };
 
@@ -89,12 +80,32 @@ export default function Form({ onUserCreated, onNext }) {
             />
           </View>
 
-          <View style={styles.inputGroup}>
+          <View style={[styles.inputGroup, showLanguageDropdown && styles.inputGroupActive]}>
             <Text style={styles.label}>Preferred Language</Text>
-            <View style={styles.input}>
+            <TouchableOpacity 
+              style={styles.input}
+              onPress={() => setShowLanguageDropdown(!showLanguageDropdown)}
+            >
               <Text style={styles.inputText}>{language}</Text>
               <Text style={styles.dropdownIcon}>▼</Text>
-            </View>
+            </TouchableOpacity>
+            
+            {showLanguageDropdown && (
+              <View style={styles.dropdown}>
+                {languages.map((lang) => (
+                  <TouchableOpacity
+                    key={lang}
+                    style={styles.dropdownItem}
+                    onPress={() => {
+                      setLanguage(lang);
+                      setShowLanguageDropdown(false);
+                    }}
+                  >
+                    <Text style={styles.dropdownText}>{lang}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
           </View>
 
           <View style={styles.inputGroup}>
@@ -153,6 +164,11 @@ const styles = StyleSheet.create({
   },
   inputGroup: {
     gap: 8,
+    position: 'relative',
+    zIndex: 1,
+  },
+  inputGroupActive: {
+    zIndex: 10000,
   },
   label: {
     fontSize: 16,
@@ -182,6 +198,33 @@ const styles = StyleSheet.create({
   dropdownIcon: {
     fontSize: 14,
     color: '#6b7280',
+  },
+  dropdown: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    marginTop: 8,
+    zIndex: 9999,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 20,
+  },
+  dropdownItem: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  dropdownText: {
+    fontSize: 16,
+    color: '#374151',
+    fontWeight: '500',
   },
   footer: {
     paddingTop: 32,

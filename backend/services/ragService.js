@@ -1,211 +1,83 @@
 const pdf = require('pdf-parse');
+const contentSafety = require('./contentSafety');
 
 class RAGService {
   constructor() {
-    this.documents = new Map(); // In-memory storage: userId -> documents
-    this.hfToken = process.env.HUGGINGFACE_API_KEY;
-    console.log('🚀 RAG Service initialized (in-memory mode)');
+    this.documents = new Map(); // In-memory storage: userId -> PDF text
+    console.log('🚀 RAG Service initialized (simple text storage)');
   }
 
   // Extract text from PDF buffer
   async extractTextFromPDF(pdfBuffer) {
     try {
       const data = await pdf(pdfBuffer);
-      console.log('📄 PDF text extracted:', data.text.substring(0, 200) + '...');
-      return data.text;
+      const extractedText = data.text;
+      
+      console.log('📄 PDF text extracted:', extractedText.substring(0, 200) + '...');
+      
+      // Validate PDF content is medical-related
+      const validation = contentSafety.validatePDFContent(extractedText);
+      if (!validation.isValid) {
+        throw new Error(`PDF validation failed: ${validation.reason}`);
+      }
+      
+      // Sanitize the extracted text
+      const sanitizedText = contentSafety.sanitizeText(extractedText);
+      console.log('🛡️ PDF text validated and sanitized');
+      
+      return sanitizedText;
     } catch (error) {
       console.error('❌ PDF extraction error:', error);
       throw new Error('Failed to extract text from PDF');
     }
   }
 
-  // Split text into chunks for better context
-  chunkText(text, chunkSize = 500, overlap = 100) {
-    const chunks = [];
-    let start = 0;
-    
-    while (start < text.length) {
-      const end = Math.min(start + chunkSize, text.length);
-      const chunk = text.slice(start, end);
-      
-      if (chunk.trim()) {
-        chunks.push({
-          text: chunk.trim(),
-          start,
-          end,
-          length: chunk.length
-        });
-      }
-      
-      start = end - overlap;
-    }
-    
-    console.log(`📝 Text split into ${chunks.length} chunks`);
-    return chunks;
-  }
-
-  // Generate embeddings using Hugging Face Inference API
-  async generateEmbeddings(chunks) {
-    try {
-      const embeddings = [];
-      
-      for (const chunk of chunks) {
-        const headers = {
-          'Content-Type': 'application/json'
-        };
-        
-        if (this.hfToken) {
-          headers['Authorization'] = `Bearer ${this.hfToken}`;
-        }
-        
-        const response = await fetch('https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/all-MiniLM-L6-v2', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            inputs: chunk.text,
-            options: { wait_for_model: true }
-          })
-        });
-        
-        if (!response.ok) {
-          if (response.status === 503) {
-            console.log('⏳ Model loading, waiting 5 seconds...');
-            await new Promise(resolve => setTimeout(resolve, 5000));
-            continue; // Retry this chunk
-          }
-          throw new Error(`HuggingFace API error: ${response.status}`);
-        }
-        
-        const result = await response.json();
-        
-        let embedding;
-        if (Array.isArray(result) && Array.isArray(result[0])) {
-          embedding = result[0];
-        } else if (Array.isArray(result)) {
-          embedding = result;
-        } else {
-          throw new Error('Unexpected embedding format');
-        }
-        
-        embeddings.push({
-          ...chunk,
-          embedding
-        });
-        
-        // Small delay to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 200));
-      }
-      
-      console.log(`🧠 Generated ${embeddings.length} embeddings using HuggingFace`);
-      return embeddings;
-    } catch (error) {
-      console.error('❌ Embedding generation error:', error);
-      throw new Error('Failed to generate embeddings with HuggingFace');
-    }
-  }
-
-  // Store embeddings in memory
-  async storeInVectorDB(userId, embeddings, metadata = {}) {
+  // Store PDF text directly (no embeddings needed)
+  async storePDFText(userId, pdfText, metadata = {}) {
     try {
       if (!this.documents.has(userId)) {
         this.documents.set(userId, []);
       }
       
       const userDocs = this.documents.get(userId);
+      userDocs.push({
+        id: `${userId}-pdf-${userDocs.length}`,
+        userId,
+        text: pdfText,
+        uploadDate: new Date().toISOString(),
+        ...metadata
+      });
       
-      for (let i = 0; i < embeddings.length; i++) {
-        const emb = embeddings[i];
-        userDocs.push({
-          id: `${userId}-chunk-${userDocs.length}`,
-          userId,
-          text: emb.text,
-          embedding: emb.embedding,
-          chunkIndex: i,
-          ...metadata
-        });
-      }
-      
-      console.log(`💾 Stored ${embeddings.length} vectors for user ${userId} in memory`);
-      return embeddings.length;
+      console.log(`💾 Stored PDF text for user ${userId} (${pdfText.length} characters)`);
+      return 1; // Return count of documents stored
     } catch (error) {
-      console.error('❌ Vector storage error:', error);
-      throw new Error('Failed to store in vector database');
+      console.error('❌ PDF storage error:', error);
+      throw new Error('Failed to store PDF text');
     }
   }
 
-  // Simple cosine similarity function
-  cosineSimilarity(a, b) {
-    let dotProduct = 0;
-    let normA = 0;
-    let normB = 0;
-    
-    for (let i = 0; i < a.length; i++) {
-      dotProduct += a[i] * b[i];
-      normA += a[i] * a[i];
-      normB += b[i] * b[i];
-    }
-    
-    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
-  }
-
-  // Retrieve relevant context based on query
-  async retrieveContext(userId, query, topK = 3) {
+  // Retrieve all PDF text for a user (no similarity search needed)
+  async retrieveContext(userId, query = '') {
     try {
       if (!this.documents.has(userId)) {
         console.log(`📭 No documents found for user ${userId}`);
         return [];
       }
       
-      // Generate embedding for the query
-      const headers = {
-        'Content-Type': 'application/json'
-      };
-      
-      if (this.hfToken) {
-        headers['Authorization'] = `Bearer ${this.hfToken}`;
+      // Validate query is healthcare-related (optional since we're returning all context)
+      if (query && !contentSafety.isHealthcareQuery(query)) {
+        console.log(`🚫 Non-healthcare query blocked: "${query}"`);
+        return [];
       }
       
-      const response = await fetch('https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/all-MiniLM-L6-v2', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          inputs: query,
-          options: { wait_for_model: true }
-        })
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HuggingFace API error: ${response.status}`);
-      }
-      
-      const result = await response.json();
-      let queryEmbedding;
-      
-      if (Array.isArray(result) && Array.isArray(result[0])) {
-        queryEmbedding = result[0];
-      } else if (Array.isArray(result)) {
-        queryEmbedding = result;
-      } else {
-        throw new Error('Unexpected embedding format');
-      }
-      
-      // Calculate similarities with all user documents
       const userDocs = this.documents.get(userId);
-      const similarities = userDocs.map(doc => ({
-        ...doc,
-        score: this.cosineSimilarity(queryEmbedding, doc.embedding)
-      }));
-      
-      // Sort by similarity and take top K
-      similarities.sort((a, b) => b.score - a.score);
-      const topResults = similarities.slice(0, topK);
-      
-      const context = topResults.map(doc => ({
+      const context = userDocs.map(doc => ({
         text: doc.text,
-        score: doc.score
+        filename: doc.filename || 'prescription.pdf',
+        uploadDate: doc.uploadDate
       }));
 
-      console.log(`🔍 Retrieved ${context.length} relevant chunks for query: "${query}"`);
+      console.log(`🔍 Retrieved ${context.length} PDF documents for user ${userId}`);
       return context;
     } catch (error) {
       console.error('❌ Context retrieval error:', error);
@@ -213,33 +85,27 @@ class RAGService {
     }
   }
 
-  // Complete RAG pipeline: PDF → Vector DB
+  // Simple PDF processing: Extract → Validate → Store
   async processPDF(userId, pdfBuffer, metadata = {}) {
     try {
-      console.log(`🚀 Starting RAG pipeline for user ${userId}`);
+      console.log(`🚀 Starting simple PDF processing for user ${userId}`);
       
-      // Step 1: Extract text
+      // Step 1: Extract and validate text
       const text = await this.extractTextFromPDF(pdfBuffer);
       
-      // Step 2: Chunk text
-      const chunks = this.chunkText(text);
+      // Step 2: Store text directly
+      const docCount = await this.storePDFText(userId, text, metadata);
       
-      // Step 3: Generate embeddings
-      const embeddings = await this.generateEmbeddings(chunks);
-      
-      // Step 4: Store in vector DB
-      const vectorCount = await this.storeInVectorDB(userId, embeddings, metadata);
-      
-      console.log(`✅ RAG pipeline complete: ${vectorCount} vectors stored`);
+      console.log(`✅ PDF processing complete: ${docCount} document stored`);
       
       return {
         success: true,
-        vectorCount,
+        vectorCount: docCount, // Keep same interface
         textLength: text.length,
-        chunkCount: chunks.length
+        chunkCount: 1 // Single document
       };
     } catch (error) {
-      console.error('❌ RAG pipeline error:', error);
+      console.error('❌ PDF processing error:', error);
       throw error;
     }
   }
