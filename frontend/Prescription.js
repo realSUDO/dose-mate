@@ -36,7 +36,7 @@ export default function Prescription({ user, onComplete }) {
 
         console.log('📡 Uploading to:', `http://localhost:3000/api/upload-pdf/${user._id || user.id || 'test-user'}`);
 
-        const response = await fetch(`http://localhost:3000/api/upload-pdf/${user._id || user.id || 'test-user'}`, {
+        const response = await fetch(`https://dosemate-backend-532131686372.us-central1.run.app/api/upload-pdf/${user._id || user.id || 'test-user'}`, {
           method: 'POST',
           body: formData,
         });

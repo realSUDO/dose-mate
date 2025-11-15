@@ -206,7 +206,7 @@ export default function App() {
         conditions: user.medicalConditions || []
       } : { _id: userId }; // Always include userId even without user data
       
-      const response = await fetch('http://192.168.1.8:3000/api/start-ai-agent', {
+      const response = await fetch('https://dosemate-backend-532131686372.us-central1.run.app/api/start-ai-agent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -240,7 +240,7 @@ export default function App() {
     if (!agentId) return;
     
     try {
-      await fetch('http://192.168.1.8:3000/api/stop-ai-agent', {
+      await fetch('https://dosemate-backend-532131686372.us-central1.run.app/api/stop-ai-agent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ agentId })
