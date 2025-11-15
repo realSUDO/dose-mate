@@ -11,7 +11,19 @@ const ragService = require('./services/ragService');
 const contentSafety = require('./services/contentSafety');
 
 const app = express();
-app.use(cors());
+
+// CORS configuration for production
+const corsOptions = {
+  origin: [
+    'http://localhost:19006',
+    'http://localhost:3000', 
+    'https://dosemate-app.netlify.app',
+    /\.netlify\.app$/
+  ],
+  credentials: true
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Configure multer for PDF uploads
@@ -424,6 +436,15 @@ app.post('/api/stop-ai-agent', async (req, res) => {
   }
 });
 
+// Health check endpoint for Cloud Run
+app.get('/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+
 // Test endpoint to check if server is working
 app.get('/api/test', (req, res) => {
   res.json({ 
@@ -455,11 +476,12 @@ app.get('/api/test-rag', async (req, res) => {
   }
 });
 
-const PORT = 3000;
-app.listen(PORT, () => {
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n🚀 Server running on port ${PORT}`);
   console.log(`📱 App ID: ${appId}`);
   console.log(`👤 Customer ID: ${customerId}`);
   console.log(`🧪 Test: http://localhost:${PORT}/api/test`);
-  console.log(`\nReady to debug AI agent!\n`);
+  console.log(`❤️ Health: http://localhost:${PORT}/health`);
+  console.log(`\nReady for production deployment!\n`);
 });

@@ -1,78 +1,90 @@
-# 📋 DoseMate TODO List
+## **TODO.md for DoseMate Deployment** ✅
 
-## ✅ **COMPLETED TASKS**
+### **PHASE 1: BACKEND DEPLOYMENT (Cloud Run)**
 
-### 1. **PDF Context Integration** 
-- [x] Added better debugging for RAG context retrieval
-- [x] Enhanced logging to track context flow
-- [ ] Test AI agent responses with uploaded PDF context (needs testing)
+#### **Backend Preparation:**
+- [ ] **Create Dockerfile** in backend folder
+- [ ] **Create .dockerignore** file
+- [ ] **Update server.js** for production:
+  - [ ] Add `/health` endpoint
+  - [ ] Use `process.env.PORT`
+  - [ ] Update CORS for Netlify domain
+- [ ] **Verify environment variables**:
+  - `MONGODB_URI`
+  - `AGORA_APP_ID` 
+  - `AGORA_APP_CERTIFICATE`
+  - `and other`
 
-### 2. **Prescription Flow Enhancement**
-- [x] Added "Next" button in Prescription.js (disabled by default)
-- [x] Enable "Next" button only after PDF upload success
-- [x] Block progression without PDF upload (mandatory requirement)
-- [x] Added visual feedback for upload status
+#### **Google Cloud Setup:**
+- [ ] **Install Google Cloud CLI** or use Cloud Console
+- [ ] **Create Google Cloud project**
+- [ ] **Enable Cloud Run API**
+- [ ] **Authenticate** (`gcloud auth login`)
 
-### 3. **User Authentication System**
-- [x] Created LoginSignup page component
-- [x] Implemented user authentication backend endpoints
-- [x] Added password hashing (bcrypt)
-- [x] Created JWT token system for sessions
-- [x] Updated User model with username/password fields
+#### **Deploy Backend:**
+- [ ] **Build Docker image** locally
+- [ ] **Push to Container Registry**
+- [ ] **Deploy to Cloud Run** via CLI or Console
+- [ ] **Copy production URL** (Cloud Run endpoint)
 
-### 4. **User Flow Redesign**
-- [x] Show Login/Signup page first (before Form)
-- [x] Implemented authentication flow logic
-- [x] Updated App.js with proper state management
-- [ ] Test complete user journey (needs testing)
+### **PHASE 2: FRONTEND DEPLOYMENT (Netlify)**
 
-## 🔥 **REMAINING TASKS**
+#### **Frontend Preparation:**
+- [ ] **Update API base URL** to Cloud Run endpoint
+- [ ] **Build web version**: `npx expo export --platform web`
+- [ ] **Verify 'dist' folder** is created
 
-### Testing & Integration
-- [ ] Test PDF context in AI agent responses
-- [ ] Test complete user flow: Signup → Form → Prescription → Dashboard
-- [ ] Verify RAG pipeline works with authentication
-- [ ] Test JWT token persistence and auto-login
+#### **Netlify Deployment:**
+- [ ] **Go to [netlify.com/drop](https://netlify.com/drop)**
+- [ ] **Drag & drop 'dist' folder**
+- [ ] **Copy live Netlify URL**
+- [ ] **Test live frontend**
 
-### Minor Enhancements
-- [ ] Add loading states for better UX
-- [ ] Add error handling for network failures
-- [ ] Add logout functionality
-- [ ] Store auth token in secure storage
+### **PHASE 3: INTEGRATION TESTING**
 
-## 🛠️ **Implementation Status**
+#### **Connection Testing:**
+- [ ] **Test backend health**: `curl https://backend-url/health`
+- [ ] **Test frontend-backend connection**
+- [ ] **Verify CORS** working
+- [ ] **Test form submission** from live frontend
+- [ ] **Check MongoDB connection** from deployed backend
 
-### ✅ Backend Complete
-- Authentication endpoints: `/api/auth/signup`, `/api/auth/login`
-- User model with username/password
-- JWT token generation
-- Password hashing with bcrypt
+#### **Demo Preparation:**
+- [ ] **Prepare demo script**
+- [ ] **Test complete user flow**:
+  - User registration → Medication setup → Dashboard
+- [ ] **Verify Agora voice calls** (if integrated)
+- [ ] **Prepare backup screenshots/video**
 
-### ✅ Frontend Complete
-- LoginSignup component with form validation
-- Authentication state management
-- Conditional rendering based on auth status
-- PDF upload with mandatory progression
+### **PHASE 4: FINAL CHECKS**
 
-### ✅ Database Schema
+#### **Quick Validation:**
+- [ ] **Both URLs accessible** (no 404 errors)
+- [ ] **Database operations working** (create/read users)
+- [ ] **Mobile-responsive** on phones
+- [ ] **Elderly-friendly UX** intact
+
+#### **Emergency Backup:**
+- [ ] **Screen recording** of working demo
+- [ ] **Postman collection** of working APIs
+- [ ] **MongoDB Atlas data** screenshot
+
+---
+
+## **URGENT PRIORITY ORDER:**
+1. **Backend on Cloud Run** ⚡ (MANDATORY)
+2. **Frontend on Netlify** ⚡ (For judges)
+3. **Integration testing** 🔧
+4. **Demo preparation** 🎤
+
+---
+
+## **EXPECTED OUTCOME:**
 ```
-User Model:
-- username (unique) ✅
-- password (hashed) ✅
-- profile data (name, age, etc.) ✅
-- medications ✅
-- conversations ✅
+Frontend: https://dosemate-app.netlify.app
+Backend:  https://dosemate-backend.a.run.app
+Demo: ✅ Fully functional live application
 ```
 
-## 🎯 **Next Steps**
-1. Test the complete user journey
-2. Verify PDF context appears in AI responses
-3. Add any missing error handling
-4. Deploy and test in production environment
+**Start with the Dockerfile creation!** 🐳
 
-## 📝 **Notes**
-- All core functionality implemented
-- Authentication system is secure with JWT + bcrypt
-- PDF upload is mandatory before proceeding
-- RAG pipeline integrated with user authentication
-- Voice AI functionality preserved
