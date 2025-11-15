@@ -1,8 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Alert } from 'react-native';
 import AgoraRTC from 'agora-rtc-sdk-ng';
+import Form from './Form';
 
 export default function App() {
+  // User management state
+  const [user, setUser] = useState(null);
+  const [showForm, setShowForm] = useState(true); // Show form initially
+  
+  // Original working voice states
   const [isInCall, setIsInCall] = useState(false);
   const [client, setClient] = useState(null);
   const [localAudioTrack, setLocalAudioTrack] = useState(null);
@@ -22,6 +28,13 @@ export default function App() {
     initializeClient();
     return () => cleanup();
   }, []);
+
+  // User management callback (not used yet)
+  const handleUserCreated = (userData) => {
+    console.log('User created:', userData);
+    setUser(userData);
+    setShowForm(false);
+  };
 
   const initializeClient = () => {
     const agoraClient = AgoraRTC.createClient({ 
@@ -102,13 +115,23 @@ export default function App() {
     try {
       setAgentStatus('Starting AI Agent...');
       
+      // Create personalized context based on user data
+      const userContext = user ? {
+        name: user.name,
+        age: user.age,
+        language: user.preferences?.voicePreference || 'English',
+        medications: user.currentMedications || [],
+        conditions: user.medicalConditions || []
+      } : null;
+      
       const response = await fetch('http://192.168.1.8:3000/api/start-ai-agent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           channel: channel,
           token: token,
-          uid: uid
+          uid: uid,
+          userContext: userContext // Pass user context to backend
         })
       });
 
@@ -118,7 +141,7 @@ export default function App() {
       if (result.success && result.agent_id) {
         setAgentId(result.agent_id);
         setAgentStatus('AI Agent Started - Joining Channel...');
-        Alert.alert('Success', 'AI Agent started! You can now talk.');
+        Alert.alert('Success', `Hi ${user?.name || 'there'}! AI Agent started. You can now talk about your medications.`);
       } else {
         setAgentStatus('AI Agent Failed');
         Alert.alert('Error', `Failed to start AI agent: ${result.message || 'Unknown error'}`);
@@ -203,6 +226,24 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Form (hidden initially since showForm=false) */}
+      {showForm && (
+        <View style={styles.formOverlay}>
+          <Form onUserCreated={handleUserCreated} />
+        </View>
+      )}
+      
+      {/* User header with profile button */}
+      {user && !showForm && (
+        <View style={styles.header}>
+          <Text style={styles.welcome}>Welcome, {user.name}! 💊</Text>
+          <TouchableOpacity style={styles.profileButton} onPress={() => setShowForm(true)}>
+            <Text style={styles.profileText}>Profile</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+      
+      {/* Original working interface */}
       <TouchableOpacity 
         style={[styles.circle, isInCall && styles.activeCircle]} 
         onPress={handleTalkToMe}
@@ -229,6 +270,39 @@ const styles = StyleSheet.create({
     backgroundColor: '#f0f0f0',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  formOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1000,
+  },
+  header: {
+    position: 'absolute',
+    top: 60,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  welcome: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  profileButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 15,
+  },
+  profileText: {
+    color: 'white',
+    fontWeight: 'bold',
   },
   circle: {
     width: 200,

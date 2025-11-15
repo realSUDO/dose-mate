@@ -15,11 +15,29 @@ const customerSecret = process.env.AGORA_CUSTOMER_SECRET;
 // Start AI Agent
 app.post('/api/start-ai-agent', async (req, res) => {
   try {
-    const { channel, token, uid } = req.body;
+    const { channel, token, uid, userContext } = req.body;
     
     console.log('\n🚀 === STARTING AI AGENT ===');
     console.log('📍 Channel:', channel);
     console.log('🆔 UID:', uid);
+    console.log('👤 User Context:', userContext);
+    
+    // Create personalized system message based on user context
+    let systemMessage = "You are DoseMate, a helpful medication assistant. Keep responses very short and conversational.";
+    let greetingMessage = "Hi! I'm DoseMate. How can I help you with your medications today?";
+    
+    if (userContext) {
+      systemMessage = `You are DoseMate, a helpful medication assistant for ${userContext.name}, who is ${userContext.age} years old. ` +
+        `They prefer ${userContext.language} language. ` +
+        (userContext.medications.length > 0 ? `They are currently taking: ${userContext.medications.map(m => m.name).join(', ')}. ` : '') +
+        (userContext.conditions.length > 0 ? `They have these medical conditions: ${userContext.conditions.join(', ')}. ` : '') +
+        `Keep responses very short, conversational, and personalized to ${userContext.name}.`;
+      
+      greetingMessage = `Hi ${userContext.name}! I'm DoseMate, your personal medication assistant. How can I help you today?`;
+    }
+    
+    console.log('🤖 System Message:', systemMessage);
+    console.log('👋 Greeting Message:', greetingMessage);
     console.log('🔑 App ID:', appId);
     console.log('👤 Customer ID:', customerId);
     console.log('🔐 Customer Secret:', customerSecret ? 'SET' : 'MISSING');
@@ -45,13 +63,13 @@ app.post('/api/start-ai-agent', async (req, res) => {
             {
               parts: [
                 {
-                  text: "You are DoseMate, a helpful medication assistant. Keep responses very short and conversational."
+                  text: systemMessage
                 }
               ],
               role: "user"
             }
           ],
-          greeting_message: "Hi! I'm DoseMate. How can I help you with your medications today?",
+          greeting_message: greetingMessage,
           failure_message: "Sorry, could you repeat that?",
           max_history: 10,
           params: {
