@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Alert } from 'react-native';
 import AgoraRTC from 'agora-rtc-sdk-ng';
+import { AIDenoiserExtension } from 'agora-extension-ai-denoiser';
 import Form from './Form';
 import Prescription from './Prescription';
 
@@ -23,6 +24,11 @@ export default function App() {
   const [micStatus, setMicStatus] = useState('Not Ready');
   const [agentStatus, setAgentStatus] = useState('Not Started');
 
+  // AI Denoiser states
+  const [denoiser, setDenoiser] = useState(null);
+  const [processor, setProcessor] = useState(null);
+  const [denoiserEnabled, setDenoiserEnabled] = useState(false);
+
   // Your Agora credentials from environment
   const appId = process.env.EXPO_PUBLIC_AGORA_APP_ID || "4bfab6ca5f69421dac11a910f7287e15";
   const channel = process.env.EXPO_PUBLIC_AGORA_CHANNEL || "test-channel";
@@ -31,8 +37,37 @@ export default function App() {
 
   useEffect(() => {
     initializeClient();
+    initializeDenoiser();
     return () => cleanup();
   }, []);
+
+  const initializeDenoiser = async () => {
+    try {
+      // Create AI Denoiser extension with local WASM files
+      const denoiserExtension = new AIDenoiserExtension({
+        assetsPath: './external'
+      });
+
+      // Check compatibility
+      if (!denoiserExtension.checkCompatibility()) {
+        console.warn("AI Denoiser not supported in this browser");
+        return;
+      }
+
+      // Register the extension
+      AgoraRTC.registerExtensions([denoiserExtension]);
+      
+      // Listen for load errors
+      denoiserExtension.onloaderror = (e) => {
+        console.error("AI Denoiser load error:", e);
+      };
+
+      setDenoiser(denoiserExtension);
+      console.log("✅ AI Denoiser initialized");
+    } catch (error) {
+      console.error("❌ AI Denoiser initialization failed:", error);
+    }
+  };
 
   // User management callback (not used yet)
   const handleUserCreated = (userData) => {
@@ -118,9 +153,35 @@ export default function App() {
     try {
       console.log("🎤 Requesting microphone access...");
       setMicStatus('Requesting...');
+      
       const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
-      console.log("✅ Microphone access granted");
-      setMicStatus('Ready');
+      
+      // Apply AI Denoiser if available
+      if (denoiser) {
+        try {
+          const denoiserProcessor = denoiser.createProcessor();
+          
+          // Inject the extension to the audio processing pipeline
+          audioTrack.pipe(denoiserProcessor).pipe(audioTrack.processorDestination);
+          
+          // Enable the processor
+          await denoiserProcessor.enable();
+          
+          setProcessor(denoiserProcessor);
+          setDenoiserEnabled(true);
+          
+          console.log("✅ Microphone access granted with AI Denoiser");
+          setMicStatus('Ready (AI Denoiser)');
+        } catch (error) {
+          console.warn("⚠️ AI Denoiser failed, using regular audio:", error);
+          console.log("✅ Microphone access granted (fallback)");
+          setMicStatus('Ready');
+        }
+      } else {
+        console.log("✅ Microphone access granted");
+        setMicStatus('Ready');
+      }
+      
       setLocalAudioTrack(audioTrack);
       return audioTrack;
     } catch (error) {
@@ -238,6 +299,16 @@ export default function App() {
   };
 
   const cleanup = async () => {
+    if (processor) {
+      try {
+        await processor.disable();
+        setProcessor(null);
+        setDenoiserEnabled(false);
+      } catch (error) {
+        console.error("Error disabling AI Denoiser:", error);
+      }
+    }
+    
     if (localAudioTrack) {
       localAudioTrack.close();
     }
@@ -285,9 +356,8 @@ export default function App() {
           
           {isInCall && (
             <View style={styles.statusContainer}>
-              <Text style={styles.status}>🔗 Connection: {connectionStatus}</Text>
-              <Text style={styles.status}>🎤 Microphone: {micStatus}</Text>
               <Text style={styles.status}>🤖 AI Agent: {agentStatus}</Text>
+              {denoiserEnabled && <Text style={styles.status}>🔇 AI Denoiser: Active</Text>}
             </View>
           )}
         </>
@@ -350,7 +420,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   activeCircle: {
-    backgroundColor: '#FF3B30',
+    backgroundColor: '#34C759',
   },
   text: {
     color: 'white',

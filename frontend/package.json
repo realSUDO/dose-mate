@@ -9,6 +9,7 @@
     "web": "expo start --web"
   },
   "dependencies": {
+    "agora-extension-ai-denoiser": "^1.1.0",
     "agora-rtc-sdk-ng": "^4.24.0",
     "expo": "~54.0.23",
     "expo-status-bar": "~3.0.8",
