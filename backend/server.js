@@ -3,11 +3,26 @@ const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
 const mongoose = require('mongoose');
+const multer = require('multer');
 const User = require('./models/User');
+const ragService = require('./services/ragService');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Configure multer for PDF uploads
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'application/pdf') {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PDF files allowed'), false);
+    }
+  },
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+});
 
 // MongoDB connection
 mongoose.connect(process.env.MONGODB_URI)
@@ -48,6 +63,34 @@ app.put('/api/users/:id', async (req, res) => {
   }
 });
 
+// PDF upload endpoint
+app.post('/api/upload-pdf/:userId', upload.single('pdf'), async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { filename } = req.body;
+    
+    if (!req.file) {
+      return res.status(400).json({ error: 'No PDF file uploaded' });
+    }
+
+    console.log(`📄 Processing PDF for user ${userId}: ${filename || req.file.originalname}`);
+    
+    const result = await ragService.processPDF(userId, req.file.buffer, {
+      filename: filename || req.file.originalname,
+      uploadDate: new Date().toISOString()
+    });
+
+    res.json({
+      success: true,
+      message: 'PDF processed successfully',
+      ...result
+    });
+  } catch (error) {
+    console.error('❌ PDF upload error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Your Agora credentials
 const appId = process.env.AGORA_APP_ID;
 const customerId = process.env.AGORA_CUSTOMER_ID;
@@ -56,12 +99,28 @@ const customerSecret = process.env.AGORA_CUSTOMER_SECRET;
 // Start AI Agent
 app.post('/api/start-ai-agent', async (req, res) => {
   try {
-    const { channel, token, uid, userContext } = req.body;
+    const { channel, token, uid, userContext, query } = req.body;
     
     console.log('\n🚀 === STARTING AI AGENT ===');
     console.log('📍 Channel:', channel);
     console.log('🆔 UID:', uid);
     console.log('👤 User Context:', userContext);
+    console.log('🔍 Query:', query);
+    
+    // Get RAG context if user has uploaded PDFs
+    let ragContext = '';
+    if (userContext && userContext._id && query) {
+      try {
+        const contextResults = await ragService.retrieveContext(userContext._id, query);
+        if (contextResults.length > 0) {
+          ragContext = '\n\nRelevant prescription information:\n' + 
+            contextResults.map(ctx => `- ${ctx.text}`).join('\n');
+          console.log('📚 RAG Context retrieved:', ragContext.substring(0, 200) + '...');
+        }
+      } catch (error) {
+        console.log('⚠️ RAG context retrieval failed:', error.message);
+      }
+    }
     
     // Create personalized system message based on user context
     let systemMessage = "You are DoseMate, a helpful medication assistant. Keep responses very short and conversational.";
@@ -72,6 +131,7 @@ app.post('/api/start-ai-agent', async (req, res) => {
         `They prefer ${userContext.language} language. ` +
         (userContext.medications.length > 0 ? `They are currently taking: ${userContext.medications.map(m => m.name).join(', ')}. ` : '') +
         (userContext.conditions.length > 0 ? `They have these medical conditions: ${userContext.conditions.join(', ')}. ` : '') +
+        ragContext +
         `Keep responses very short, conversational, and personalized to ${userContext.name}.`;
       
       greetingMessage = `Hi ${userContext.name}! I'm DoseMate, your personal medication assistant. How can I help you today?`;
@@ -224,6 +284,27 @@ app.get('/api/test', (req, res) => {
     customerId: customerId,
     timestamp: new Date().toISOString()
   });
+});
+
+// Test RAG service endpoint
+app.get('/api/test-rag', async (req, res) => {
+  try {
+    // Test text chunking
+    const testText = "This is a test prescription. Patient should take 2 tablets of aspirin daily. Take with food. Side effects may include nausea.";
+    const chunks = ragService.chunkText(testText, 50, 10);
+    
+    res.json({
+      success: true,
+      message: 'RAG service initialized successfully',
+      testChunks: chunks.length,
+      sampleChunk: chunks[0]?.text || 'No chunks'
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
 });
 
 const PORT = 3000;

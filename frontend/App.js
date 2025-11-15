@@ -2,11 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Alert } from 'react-native';
 import AgoraRTC from 'agora-rtc-sdk-ng';
 import Form from './Form';
+import Prescription from './Prescription';
+import PDFUpload from './PDFUpload';
 
 export default function App() {
   // User management state
   const [user, setUser] = useState(null);
   const [showForm, setShowForm] = useState(true); // Show form initially
+  const [showPrescription, setShowPrescription] = useState(false);
   
   // Original working voice states
   const [isInCall, setIsInCall] = useState(false);
@@ -34,6 +37,21 @@ export default function App() {
     console.log('User created:', userData);
     setUser(userData);
     setShowForm(false);
+  };
+
+  // Navigation from form to prescription screen
+  const handleFormNext = (userData) => {
+    console.log('Form completed, going to prescription:', userData);
+    setUser(userData);
+    setShowForm(false);
+    setShowPrescription(true);
+  };
+
+  // Navigation from prescription to main app
+  const handlePrescriptionComplete = (updatedUser) => {
+    console.log('Prescription completed:', updatedUser);
+    setUser(updatedUser);
+    setShowPrescription(false);
   };
 
   const initializeClient = () => {
@@ -117,6 +135,7 @@ export default function App() {
       
       // Create personalized context based on user data
       const userContext = user ? {
+        _id: user._id, // Add user ID for RAG context
         name: user.name,
         age: user.age,
         language: user.preferences?.voicePreference || 'English',
@@ -131,7 +150,8 @@ export default function App() {
           channel: channel,
           token: token,
           uid: uid,
-          userContext: userContext // Pass user context to backend
+          userContext: userContext, // Pass user context to backend
+          query: 'medication information prescription dosage' // Default query for RAG
         })
       });
 
@@ -229,12 +249,19 @@ export default function App() {
       {/* Form (hidden initially since showForm=false) */}
       {showForm && (
         <View style={styles.formOverlay}>
-          <Form onUserCreated={handleUserCreated} />
+          <Form onNext={handleFormNext} />
+        </View>
+      )}
+
+      {/* Prescription Screen */}
+      {showPrescription && (
+        <View style={styles.formOverlay}>
+          <Prescription user={user} onComplete={handlePrescriptionComplete} />
         </View>
       )}
       
       {/* User header with profile button */}
-      {user && !showForm && (
+      {user && !showForm && !showPrescription && (
         <View style={styles.header}>
           <Text style={styles.welcome}>Welcome, {user.name}! 💊</Text>
           <TouchableOpacity style={styles.profileButton} onPress={() => setShowForm(true)}>

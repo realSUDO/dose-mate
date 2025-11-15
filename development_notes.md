@@ -123,6 +123,27 @@
 - ✅ Voice functionality preserved
 - ✅ Backend logs show "✅ User saved to MongoDB"
 
-## Next Phase: Prescription Screen Integration
-**Goal**: Add prescription.jsx from MyNewApp with PDF upload and manual typing
-**Strategy**: Import screen, add routing, modify form flow
+## RAG Pipeline Implementation ⚠️ IN PROGRESS
+**Goal**: PDF processing with vector database for AI agent context
+**Strategy**: PDF → Text → Chunks → Embeddings → Vector DB → Context Retrieval
+
+### Requirements:
+- ✅ PDF text extraction
+- ✅ Text chunking for optimal context
+- ✅ Vector embeddings generation
+- ✅ Vector database storage (Pinecone/Chroma)
+- ✅ Context retrieval for AI agent
+- ✅ Integration with existing AI agent system
+
+### Architecture:
+```
+PDF Upload → PDF Parser → Text Chunks → Embeddings → Vector DB
+                                                          ↓
+AI Agent ← Context Retrieval ← Similarity Search ← User Query
+```
+
+### Dependencies Needed:
+- pdf-parse (PDF text extraction)
+- @pinecone-database/pinecone (vector storage)
+- openai (embeddings generation)
+- langchain (chunking utilities)

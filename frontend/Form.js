@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView } from 'react-native';
 
-export default function Form({ onUserCreated }) {
+export default function Form({ onUserCreated, onNext }) {
   const [name, setName] = useState('');
   const [age, setAge] = useState('');
   const [language, setLanguage] = useState('English');
@@ -41,8 +41,8 @@ export default function Form({ onUserCreated }) {
         const user = await response.json();
         console.log('✅ User saved to MongoDB:', user);
         setLoading(false);
-        if (onUserCreated) {
-          onUserCreated(user);
+        if (onNext) {
+          onNext(user); // Go to prescription screen
         }
       } else {
         const error = await response.text();
@@ -117,7 +117,7 @@ export default function Form({ onUserCreated }) {
             disabled={loading}
           >
             <Text style={styles.saveButtonText}>
-              {loading ? 'Saving...' : 'Start Using DoseMate'}
+              {loading ? 'Saving...' : 'Save & Next'}
             </Text>
           </TouchableOpacity>
         </View>
